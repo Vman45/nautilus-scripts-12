@@ -1,0 +1,51 @@
+#!/bin/bash
+
+cd $NAUTILUS_SCRIPT_CURRENT_URI
+count=0
+percent=0
+lines=`wc -l $* | awk '{print $1}'`
+
+rm tmp.txt 2>/dev/null
+sort -u $* > $*_unique
+
+echo "Net Range;Net Name;Route;Origin / OrgTechHandle;Country;Organization, notes;IP;Domain" > tmp.csv
+while read line; do
+	domain=""
+	count=`expr $count + 1`
+	percent=`expr $count \* 100 / $lines`
+	echo "$percent"
+
+	if [ `echo $line | grep [a-z]` ]; then
+		domain=$line
+		lookup=`nslookup $line | grep 'Address' | grep -v '#' | awk '{print $2}'`
+		line=`echo $lookup | awk '{print $1}'`
+	fi
+	whois $line > whoistmp.txt
+	if  [[ `cat whoistmp.txt | grep -v 'No whois server'` ]]; then
+		cat whoistmp.txt | grep inetnum: | awk -F '  +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep netname: | awk -F ' +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep route: | awk -F ' +' '{printf $2" "}' >> tmp.csv
+		if [[ `cat whoistmp.txt | grep 'route'` ]]; then
+			printf ";" >> tmp.csv
+		fi
+		cat whoistmp.txt | grep origin: | awk -F ' +' '{printf $2" "}' >> tmp.csv
+		if [[ `cat whoistmp.txt | grep 'route'` ]]; then
+			printf ";" >> tmp.csv
+		fi
+		cat whoistmp.txt | grep country: | awk -F ' +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep descr: | awk -F ' +' '{printf $2" "}' >> tmp.csv
+
+		cat whoistmp.txt | grep NetRange: | awk -F '  +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep NetName: | awk -F ' +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep CIDR: | awk -F ' +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep OrgTechHandle: | awk -F ' +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep Country: | awk -F ' +' '{printf $2";"}' >> tmp.csv
+		cat whoistmp.txt | grep OrgName: | awk -F ' +' '{printf $2" "}' >> tmp.csv
+
+		echo ";$line;$domain" >> tmp.csv
+	fi
+done < $*_unique | zenity --progress --title="$*" --text="$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS" --percentage=0 --no-cancel
+
+rm $*_unique
+rm whoistmp.txt
+mv tmp.csv $*_`date +%Y%m%d-%H%M%S`.csv
